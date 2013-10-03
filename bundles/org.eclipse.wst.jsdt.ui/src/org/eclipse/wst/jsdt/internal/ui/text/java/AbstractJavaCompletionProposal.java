@@ -637,6 +637,22 @@ public abstract class AbstractJavaCompletionProposal implements IJavaCompletionP
 		return validate(document, offset, null);
 	}
 
+	/**
+	 * As JavaCompletionProposal can have multiple left parenthesis and block comments, 
+	 * find variable location where ContentAssist invoked and modify ReplacementOffset to check validate successfully and replace proposal correctly.
+	 * @param strPrefix the prefix string of this proposal
+	 */
+	private void correctReplacementOffset(String strPrefix) {
+		int strLength = strPrefix.length();
+		for (int index = strLength - 1; index >= 0; index--) {
+			char ch = strPrefix.charAt(index);
+			if (ch == '(' || ch == '/' || Character.isWhitespace(ch)) {
+				setReplacementOffset(getReplacementOffset() + index + 1);
+				break;
+			}
+		}
+	}
+	
 	/*
 	 * @see org.eclipse.jface.text.contentassist.ICompletionProposalExtension2#validate(org.eclipse.jface.text.IDocument, int, org.eclipse.jface.text.DocumentEvent)
 	 */
@@ -644,6 +660,8 @@ public abstract class AbstractJavaCompletionProposal implements IJavaCompletionP
 
 		if (offset < getReplacementOffset())
 			return false;
+		
+		correctReplacementOffset(getPrefix(document, offset));
 		
 		boolean validated= isValidPrefix(getPrefix(document, offset));
 
@@ -672,7 +690,7 @@ public abstract class AbstractJavaCompletionProposal implements IJavaCompletionP
 	 * @param prefix the current prefix in the document
 	 * @return <code>true</code> if <code>prefix</code> is a valid prefix of this proposal
 	 */
-	protected boolean isValidPrefix(String prefix) {
+	public boolean isValidPrefix(String prefix) {
 		/*
 		 * See http://dev.eclipse.org/bugs/show_bug.cgi?id=17667
 		 * why we do not use the replacement string.
@@ -1014,6 +1032,24 @@ public abstract class AbstractJavaCompletionProposal implements IJavaCompletionP
 		
 		CompletionProposal proposal= ((MemberProposalInfo)fProposalInfo).fProposal;
 		return proposal != null && (proposal.getKind() == CompletionProposal.METHOD_REF || proposal.getKind() == CompletionProposal.FIELD_REF);
+	}
+	
+	/**
+	 * <p>
+	 * Two proposals are equal if their display strings are the same.
+	 * </p>
+	 * 
+	 * @see java.lang.Object#equals(java.lang.Object)
+	 */
+	public boolean equals(Object obj) {
+		boolean equal = false;
+		
+		if(obj instanceof AbstractJavaCompletionProposal) {
+			AbstractJavaCompletionProposal other = (AbstractJavaCompletionProposal)obj;
+			equal = this.getDisplayString().equals(other.getDisplayString());
+		}
+		
+		return equal;
 	}
 	
 }

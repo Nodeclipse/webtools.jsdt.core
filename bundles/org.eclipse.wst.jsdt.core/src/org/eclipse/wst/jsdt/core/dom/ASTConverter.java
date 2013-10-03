@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2011 IBM Corporation and others.
+ * Copyright (c) 2000, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -34,6 +34,7 @@ import org.eclipse.wst.jsdt.internal.compiler.ast.JavadocFieldReference;
 import org.eclipse.wst.jsdt.internal.compiler.ast.JavadocMessageSend;
 import org.eclipse.wst.jsdt.internal.compiler.ast.LocalDeclaration;
 import org.eclipse.wst.jsdt.internal.compiler.ast.MessageSend;
+import org.eclipse.wst.jsdt.internal.compiler.ast.ObjectGetterSetterField;
 import org.eclipse.wst.jsdt.internal.compiler.ast.OperatorIds;
 import org.eclipse.wst.jsdt.internal.compiler.ast.ProgramElement;
 import org.eclipse.wst.jsdt.internal.compiler.ast.StringLiteralConcatenation;
@@ -339,6 +340,7 @@ class ASTConverter {
 
 	public ASTNode convert(org.eclipse.wst.jsdt.internal.compiler.ast.AbstractMethodDeclaration methodDeclaration) {
 		checkCanceled();
+		trimWhiteSpacesAndComments(methodDeclaration);
 		FunctionDeclaration methodDecl = new FunctionDeclaration(this.ast);
 		setModifiers(methodDecl, methodDeclaration);
 		boolean isConstructor = methodDeclaration.isConstructor();
@@ -346,13 +348,14 @@ class ASTConverter {
 		int start = methodDeclaration.sourceStart;
 		int end;
 		 SimpleName methodName =null;
-		if (methodDeclaration.selector!=null)
+		 char[] name = methodDeclaration.getName();
+		if (name!=null)
 		{
 			  methodName = new SimpleName(this.ast);
-			methodName.internalSetIdentifier(new String(methodDeclaration.selector));
+			methodName.internalSetIdentifier(new String(name));
 			end = retrieveIdentifierEndPosition(start, methodDeclaration.sourceEnd);
 
-			methodName.setSourceRange(start, end - start + 1);
+			methodName.setSourceRange(start, end == -1 ? 0 : end - start + 1);
 			methodDecl.setName(methodName);
 		}
 		else
@@ -1038,7 +1041,12 @@ class ASTConverter {
 			int fieldsLength = fields.length;
 			for (int i = 0; i < fieldsLength; i++) {
 
-				ObjectLiteralField objectLiteralField =convert(fields[i]);
+				ObjectLiteralField objectLiteralField = null;
+				if(fields[i] instanceof ObjectGetterSetterField) {
+					objectLiteralField = convert((ObjectGetterSetterField)fields[i]);
+				} else {
+					objectLiteralField = convert(fields[i]);
+				}
 				objectLiteral.fields().add(objectLiteralField);
 			}
 		}
@@ -1058,6 +1066,19 @@ class ASTConverter {
 		if (this.resolveBindings) {
 			recordNodes(objectLiteralField, field);
 		}
+		return objectLiteralField;
+	}
+	
+	public ObjectLiteralField convert(org.eclipse.wst.jsdt.internal.compiler.ast.ObjectGetterSetterField field) {
+		ObjectLiteralField objectLiteralField = new ObjectLiteralField(this.ast);
+		objectLiteralField.setSourceRange(field.sourceStart, field.sourceEnd - field.sourceStart + 1);
+		
+		// ignore get set properties
+//		objectLiteralField.setFieldName( convert(field.fieldName));
+//		objectLiteralField.setInitializer( convert(field.initializer));
+//		if (this.resolveBindings) {
+//			recordNodes(objectLiteralField, field);
+//		}
 		return objectLiteralField;
 	}
 
@@ -3111,7 +3132,7 @@ class ASTConverter {
 			}
 		}
 		AbstractMethodDeclaration abstractMethodDeclaration = (AbstractMethodDeclaration) this.ast.getBindingResolver().getCorrespondingNode(currentNode);
-		return abstractMethodDeclaration.scope;
+		return abstractMethodDeclaration.getScope();
 	}
 
 	protected void recordName(Name name, org.eclipse.wst.jsdt.internal.compiler.ast.ASTNode compilerNode) {
@@ -3259,14 +3280,14 @@ class ASTConverter {
 	}
 
 	/**
-	 * Remove whitespaces and comments before and after the expression.
+	 * Remove white spaces and comments before and after the expression.
 	 */
-	private void trimWhiteSpacesAndComments(org.eclipse.wst.jsdt.internal.compiler.ast.Expression expression) {
-		int start = expression.sourceStart;
-		int end = expression.sourceEnd;
+	private void trimWhiteSpacesAndComments(org.eclipse.wst.jsdt.internal.compiler.ast.Statement statement) {
+		int start = statement.sourceStart;
+		int end = statement.sourceEnd;
 		int token;
-		int trimLeftPosition = expression.sourceStart;
-		int trimRightPosition = expression.sourceEnd;
+		int trimLeftPosition = statement.sourceStart;
+		int trimRightPosition = statement.sourceEnd;
 		boolean first = true;
 		Scanner removeBlankScanner = this.ast.scanner;
 		try {
@@ -3288,8 +3309,8 @@ class ASTConverter {
 						}
 						break;
 					case TerminalTokens.TokenNameEOF :
-						expression.sourceStart = trimLeftPosition;
-						expression.sourceEnd = trimRightPosition;
+						statement.sourceStart = trimLeftPosition;
+						statement.sourceEnd = trimRightPosition;
 						return;
 					default :
 						/*
